@@ -297,8 +297,11 @@ function rebuildCoords(points, coords, params, rotations) {
 			R = numeric.dot(R,P);
 	}
 	R = numeric.mul(1/params.zoom, R);
+	
+	T = [[1,0,0],[0,1,0],[0,0,1],[0,0,0],[0,0,0]]; // takes the three left columns, drops the rest... we will have 0 contribution from dimensions > 3 anyways because our view volume is only 3D
+	R = numeric.dot(R,T);
 	for (i=0; i<points.length; i++) {
-		coords[i] = numeric.dot(R, [points[i].x, points[i].y, points[i].z, 0, 0]);
+		coords[i] = numeric.dot(R, [points[i].x, points[i].y, points[i].z]);
 	}
 }
 
