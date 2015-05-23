@@ -8,6 +8,8 @@
 </head>
 <body>
 
+<script src="js/numeric-1.2.6.js"></script>
+
 <script src="js/BigNumber.js"></script>
 <script src="js/HydrogenElectronPDF.js"></script>
 <script type='text/javascript'>
@@ -34,6 +36,20 @@
 <link rel=stylesheet href="css/jquery-ui.css" />
 <link rel=stylesheet href="css/info.css"/>
 <script src="js/info.js"></script>
+
+<script>
+function getURLParameter(name) {
+  return decodeURIComponent((new RegExp('[?|&]' + name + '=' + '([^&;]+?)(&|#|;|$)').exec(location.search)||[,""])[1].replace(/\+/g, '%20'))||null
+}
+
+function getURLParameterWithDefault(name, def) {
+	var val = getURLParameter(name);
+	if (val == null) 
+		return def;
+	else
+		return val; 
+}
+</script>
 
 <div id="ThreeJS" style="position: absolute; left:0px; top:0px"></div>
 <script>
@@ -93,13 +109,13 @@ function init() {
 	container.appendChild( stats.domElement );
 	// LIGHT
 	var light = new THREE.PointLight(0xff0000);
-	light.position.set(5,0,0);
+	light.position.set(15,0,0);
 	scene.add(light);
 	var light = new THREE.PointLight(0x00ff00);
-	light.position.set(0,5,0);
+	light.position.set(0,15,0);
 	scene.add(light);
 	var light = new THREE.PointLight(0x0000ff);
-	light.position.set(0,0,5);
+	light.position.set(0,0,15);
 	scene.add(light);
 	var light = new THREE.PointLight(0xaaaaaa);
 	light.position.set(0,0,0);
@@ -122,11 +138,15 @@ function init() {
 	
 	scene.add( new THREE.AxisHelper(axisMax) );
 
-	this.size  = 80; 
+	if (getURLParameter('size') != null) 
+		this.size = getURLParameter('size');
+	else
+		this.size  = 40; 
 	var size2 = size*size; 
 	var size3 = size*size*size;
 	
 	this.points = [];
+	this.coords = [];
 	
 	// generate the list of 3D points
 	for (var k = 0; k < size; k++)
@@ -136,6 +156,7 @@ function init() {
 		var y = axisMin + axisRange * j / (size - 1);
 		var z = axisMin + axisRange * k / (size - 1);
 		points.push( new THREE.Vector3(x,y,z) );
+		coords.push( [x,y,z,0,0] );
 	}
 	
     this.values = [];
@@ -155,107 +176,79 @@ function init() {
 	gui = new dat.GUI();	
 	this.guiElements = [];
 	this.params = { 
-		coefficient: 3,
-		exponent: 4,
 		iso: 1,
-		
-		n: 4,
-		l: 2,
-		m: 0,
-		a: 1,
-		b: 0.5,
-		scale: 30,
-		
-		pause: false,
+		a: 3.5,
+		b: 3.5,
+		zoom: 1,
+		coordinates: true,
+		values: true,
+		geometry: true,
+		invertOrder: false,
 	};
-
 	
+	this.rotations = [];
+	rotations.push( {
+			axis1: 	0,
+			axis2: 	3,
+			degrees: 45} );
+	for (i=1; i<getURLParameterWithDefault('rots',3); i++) {
+		rotations.push( {
+			axis1: 	0,
+			axis2: 	0,
+			degrees: 0} );
+	}
+
+	this.coordsDirty = false;
 	this.scalarFieldDirty = false;
 	this.meshDirty = false;
+	var setCoordsDirty = function(value) {
+		coordsDirty = true;
+	}
 	var setScalarFieldDirty = function(value) {
 		scalarFieldDirty = true;
 	}
 	var setMeshDirty = function(value) { //only needed if setScalarFieldDirty need not also be called.
 		meshDirty = true;
 	};
-/*		
-	this.isolevelIndex = guiElements.length;
-	guiElements.push(gui.add( params, 'coefficient' ).min(1).max(10).name("Coefficient").listen());
-	guiElements[guiElements.length - 1].onChange( setMeshDirty );	
-	
+
+	gui.add(params, 'iso').onChange( setMeshDirty );
+	gui.add(params, 'a').onChange( setScalarFieldDirty );
+	gui.add(params, 'b').onChange( setScalarFieldDirty );
+	gui.add(params, 'zoom').onChange( setCoordsDirty );
+	gui.add(params, 'invertOrder').onChange( setCoordsDirty );
 		
-	this.isolevelIndex = guiElements.length;
-	guiElements.push(gui.add( params, 'exponent' ).min(0).max(10).step(1).name("Neg Exp").listen());
-	guiElements[guiElements.length - 1].onChange( setMeshDirty );	
-*/	
-	this.isolevelIndex = guiElements.length;
-	guiElements.push(gui.add( params, 'iso' ).listen());
-	guiElements[guiElements.length - 1].onChange( setMeshDirty);
+	var folder = gui.addFolder('Rotation '+1);
+	folder.add(rotations[0], 'axis1', {X:0, Y:1, Z:2, A:3, B:4}).onChange( setCoordsDirty );
+	folder.add(rotations[0], 'axis2', {X:0, Y:1, Z:2, A:3, B:4}).onChange( setCoordsDirty );
+	folder.add(rotations[0], 'degrees').min(-360).max(360).onChange( setCoordsDirty );
+	folder.open();
 	
-/*	this.nIndex = guiElements.length;
-	guiElements.push(gui.add(params, 'n').step(1).min(1)); 
+	for (i=1; i<rotations.length; i++) {
+		var folder = gui.addFolder('Rotation '+(i+1));
+		folder.add(rotations[i], 'axis1', {X:0, Y:1, Z:2, A:3, B:4}).onChange( setCoordsDirty );
+		folder.add(rotations[i], 'axis2', {X:0, Y:1, Z:2, A:3, B:4}).onChange( setCoordsDirty );
+		folder.add(rotations[i], 'degrees').min(-360).max(360).onChange( setCoordsDirty );
+	}
 	
-	this.nIndex = guiElements.length;
-	guiElements.push(gui.add(params, 'l').step(1).min(0)); 
+	var folder = gui.addFolder('Live Update Settings');
+	folder.add(params, 'coordinates').onChange( setCoordsDirty );
+	folder.add(params, 'values').onChange( setScalarFieldDirty );
+	folder.add(params, 'geometry').onChange( setMeshDirty );
+	folder.close();
 	
-	this.nIndex = guiElements.length;
-	guiElements.push(gui.add(params, 'm').step(1)); */
-	
-	this.nIndex = guiElements.length;
-	guiElements.push(gui.add(params, 'a').min(-6).max(6).listen());
-	guiElements[guiElements.length - 1].onChange( setScalarFieldDirty );
-	
-	this.nIndex = guiElements.length;
-	guiElements.push(gui.add(params, 'b').min(0).max(1).listen());
-	guiElements[guiElements.length - 1].onChange( setScalarFieldDirty );
-	
-/*	this.isolevelIndex = guiElements.length;
-	guiElements.push(gui.add( params, 'scale' ).min(1).max(256).name("Scale").listen());
-	
-	guiElements.push(gui.add( params, 'pause' ).name("Update"));
-	guiElements[guiElements.length - 1].onChange( setScalarFieldDirty );
-	*/
 	// Initial draw to screen, unconditional of initial pause state.
+	setCoordsDirty(); // apparently this line is necessary?
+	rebuildCoords(points, values, params, rotations);
 	rebuildScalarField(points, values, params);
 	rebuildMesh(scene, points, values, params, colorMaterial);	
-	
-	this.t = 0;
-	this.oldT = 0;
-	this.animTimes = [];
-	while (animTimes.length != guiElements.length) animTimes.push(0);
 }
 
 function rebuildScalarField(points, values, params) {
 	resetValues( values );
-
-	var N = params.n;
-	var L = params.l;
-	var M = params.m;
-	//initializePDF(N,L,M);
-	var origin = new THREE.Vector3(0,0,0);
-	var r, theta, phi = 0;
-	var x, y, z;
-	var out;
-	
-	var B = params.b * 3.1415926535 / 2; // between 0 and 180 degrees
-	var sinB = Math.sin(B);
-	var cosB = Math.cos(B); 
-	var AsinB = params.a * sinB;
-	var AcosB = params.a * cosB;
-//	(sqrt(x^2 + (y*sin(b) + a*cos(b))^2) - 3)^2 + (sqrt(z^2 + (y*cos(b) - a*sin(b))^2) - 3)^2 = 1
 	for (var i = 0; i < values.length; i++) {
-		x = points[i].x;
-		y = points[i].z;
-		z = points[i].y;
-//		r = origin.distanceTo(points[i]) * params.scale / 10;
-//		theta = Math.atan2(Math.sqrt(x*x + y*y),  z);
-//		phi = Math.atan2(x, y);
-		var t = (y*sinB + AcosB);
-		var u = Math.sqrt(x*x + t*t) - 3;
-		
-		var v = y*cosB - AsinB;
-		var w = Math.sqrt(z*z + v*v) - 3;
-		values[i] = u*u + w*w;
+		var t = Math.sqrt(coords[i][0]*coords[i][0] + coords[i][1]*coords[i][1]) - params.a;
+		var u = Math.sqrt(coords[i][2]*coords[i][2] + coords[i][3]*coords[i][3]) - params.b;
+		values[i] = t*t + u*u;
 	}
 }
 
@@ -285,12 +278,44 @@ function animate() {
 	update();
 }
 
+function rebuildCoords(points, coords, params, rotations) {
+	var R = numeric.identity(5); // total rotation
+	for (i=0; i<rotations.length; i++) {
+		var P = numeric.identity(5); // planar rotation
+		if (rotations[i].axis1 != rotations[i].axis2) {
+			var theta = rotations[i].degrees * 3.1415926535 / 180;
+			var c = Math.cos(theta);
+			var s = Math.sin(theta);
+			P[rotations[i].axis1][rotations[i].axis1] = c;
+			P[rotations[i].axis2][rotations[i].axis2] = c;
+			P[rotations[i].axis1][rotations[i].axis2] = s;
+			P[rotations[i].axis2][rotations[i].axis1] = -s;
+		}
+		if (params.invertOrder) 
+			R = numeric.dot(P,R);
+		else
+			R = numeric.dot(R,P);
+	}
+	R = numeric.mul(1/params.zoom, R);
+	for (i=0; i<points.length; i++) {
+		coords[i] = numeric.dot(R, [points[i].x, points[i].y, points[i].z, 0, 0]);
+	}
+}
+
 function update() {
 	controls.update();
 	stats.update();
 	
+	if (coordsDirty) {
+		if (params.coordinates) {
+			coordsDirty = false;
+			scalarFieldDirty = true;
+			rebuildCoords(points, coords, params, rotations);
+		}
+	}
+	
 	if (scalarFieldDirty) {
-		if (!params.pause) {
+		if (params.values) {
 			scalarFieldDirty = false;
 			meshDirty = true;		
 			rebuildScalarField(points, values, params);	
@@ -298,8 +323,10 @@ function update() {
 	}
 	
 	if (meshDirty) {
-		meshDirty = false;
-		mesh = rebuildMesh(scene, points, values, params, colorMaterial);	
+		if (params.geometry) {
+			meshDirty = false;
+			mesh = rebuildMesh(scene, points, values, params, colorMaterial);	
+		}
 	}
 }
 
